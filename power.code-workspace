@@ -1,0 +1,11 @@
+{
+	"folders": [
+		{
+			"path": "F:\\workspace\\homeassistant\\automation"
+		}
+	],
+	"settings": {
+		"vscode-home-assistant.hostUrl": "http://192.168.199.129:8123",
+		"vscode-home-assistant.longLivedAccessToken": "eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9.eyJpYXQiOjE1NTA2NzIzOTAsImlzcyI6ImVmYmU5YWFhMWZlYzQ4YTNhOGVkZTNjNTU2YWE4MTU1IiwiZXhwIjoxODY2MDMyMzkwfQ.GlA1Qb0LmIWqSvkTSgv_7bUyMxq5IfU1kPR9PBBCb5YBCb5Y"
+	}
+}
