@@ -14,20 +14,30 @@
 
 #define PLL_CLOCK       50000000
 
+#define APP_TRACE_ENABLE
+
+#ifdef APP_TRACE_ENABLE
+#define app_trace printf
+#else
+#define app_trace(...)
+#endif
+
 int32_t i32BatteryValue[5];
+int32_t i32BatterySumValue[5];
+int32_t i32BatteryAvgValue[5];
 
 /*---------------------------------------------------------------------------*/
 /*  Function Declare                                                         */
 /*---------------------------------------------------------------------------*/
 extern char GetChar(void);
 void CAN_ShowMsg(STR_CANMSG_T* Msg);
-
+void CAN_STOP(void);
 /*---------------------------------------------------------------------------------------------------------*/
 /*  Function for System Entry to Power-down Mode                                                           */
 /*---------------------------------------------------------------------------------------------------------*/
 void PowerDownFunction(void)
 {
-    printf("\nSystem enter to power-down mode ...\n");
+//    app_trace("\nSystem enter to power-down mode ...\n");
 
     /* To check if all the debug messages are finished */
     while(IsDebugFifoEmpty() == 0);
@@ -77,17 +87,17 @@ void TMR0_IRQHandler(void)
 void CAN_MsgInterrupt(CAN_T *tCAN, uint32_t u32IIDR)
 {
     if(u32IIDR == 1) {
-        printf("Msg-0 INT and Callback\n");
+        app_trace("Msg-0 INT and Callback\n");
         CAN_Receive(tCAN, 0, &rrMsg);
         CAN_ShowMsg(&rrMsg);
     }
     if(u32IIDR == 5 + 1) {
-        printf("Msg-5 INT and Callback \n");
+        app_trace("Msg-5 INT and Callback \n");
         CAN_Receive(tCAN, 5, &rrMsg);
         CAN_ShowMsg(&rrMsg);
     }
     if(u32IIDR == 31 + 1) {
-        printf("Msg-31 INT and Callback \n");
+        app_trace("Msg-31 INT and Callback \n");
         CAN_Receive(tCAN, 31, &rrMsg);
         CAN_ShowMsg(&rrMsg);
     }
@@ -109,33 +119,33 @@ void CAN0_IRQHandler(void)
         if(CAN0->STATUS & CAN_STATUS_RXOK_Msk) {
             CAN0->STATUS &= ~CAN_STATUS_RXOK_Msk;   /* Clear RxOK status*/
 
-            printf("RxOK INT\n") ;
+            app_trace("RxOK INT\n") ;
         }
 
         if(CAN0->STATUS & CAN_STATUS_TXOK_Msk) {
             CAN0->STATUS &= ~CAN_STATUS_TXOK_Msk;    /* Clear TxOK status*/
 
-            printf("TxOK INT\n") ;
+            app_trace("TxOK INT\n") ;
         }
 
         /**************************/
         /* Error Status interrupt */
         /**************************/
         if(CAN0->STATUS & CAN_STATUS_EWARN_Msk) {
-            printf("EWARN INT\n") ;
+            app_trace("EWARN INT\n") ;
         }
 
         if(CAN0->STATUS & CAN_STATUS_BOFF_Msk) {
-            printf("BOFF INT\n") ;
+            app_trace("BOFF INT\n") ;
         }
     } else if(u8IIDRstatus != 0) {
-        printf("=> Interrupt Pointer = %d\n", CAN0->IIDR - 1);
+        app_trace("=> Interrupt Pointer = %d\n", CAN0->IIDR - 1);
 
         CAN_MsgInterrupt(CAN0, u8IIDRstatus);
 
         CAN_CLR_INT_PENDING_BIT(CAN0, ((CAN0->IIDR) - 1)); /* Clear Interrupt Pending */
     } else if(CAN0->WU_STATUS == 1) {
-        printf("Wake up\n");
+        app_trace("Wake up\n");
 
         CAN0->WU_STATUS = 0;     /* Write '0' to clear */
     }
@@ -158,33 +168,34 @@ void CAN1_IRQHandler(void)
         if(CAN1->STATUS & CAN_STATUS_RXOK_Msk) {
             CAN1->STATUS &= ~CAN_STATUS_RXOK_Msk;   /* Clear RxOK status*/
 
-            printf("RxOK INT\n") ;
+            app_trace("RxOK INT\n") ;
         }
 
         if(CAN1->STATUS & CAN_STATUS_TXOK_Msk) {
             CAN1->STATUS &= ~CAN_STATUS_TXOK_Msk;    /* Clear TxOK status*/
-
-            printf("TxOK INT\n") ;
+			CAN_Close(CAN1);
+            app_trace("TxOK INT\n") ;
         }
 
         /**************************/
         /* Error Status interrupt */
         /**************************/
         if(CAN1->STATUS & CAN_STATUS_EWARN_Msk) {
-            printf("EWARN INT\n") ;
+			CAN_Close(CAN1);
+            app_trace("EWARN INT\n") ;
         }
 
         if(CAN1->STATUS & CAN_STATUS_BOFF_Msk) {
-            printf("BOFF INT\n") ;
+            app_trace("BOFF INT\n") ;
         }
     } else if(u8IIDRstatus != 0) {
-        printf("=> Interrupt Pointer = %d\n", CAN1->IIDR - 1);
+        app_trace("=> Interrupt Pointer = %d\n", CAN1->IIDR - 1);
 
         CAN_MsgInterrupt(CAN1, u8IIDRstatus);
 
         CAN_CLR_INT_PENDING_BIT(CAN1, ((CAN1->IIDR) - 1)); /* Clear Interrupt Pending */
     } else if(CAN1->WU_STATUS == 1) {
-        printf("Wake up\n");
+        app_trace("Wake up\n");
 
         CAN1->WU_STATUS = 0;     /* Write '0' to clear */
     }
@@ -199,10 +210,10 @@ void CAN_ShowMsg(STR_CANMSG_T* Msg)
     uint8_t i;
 
     /* Show the message information */
-    printf("Read ID=0x%X, Type=%s, DLC=%d, Data=", Msg->Id, Msg->IdType ? "EXT" : "STD", Msg->DLC);
+    app_trace("Read ID=0x%X, Type=%s, DLC=%d, Data=", Msg->Id, Msg->IdType ? "EXT" : "STD", Msg->DLC);
     for(i = 0; i < Msg->DLC; i++)
-        printf("%X,", Msg->Data[i]);
-    printf("\n\n");
+        app_trace("%X,", Msg->Data[i]);
+    app_trace("\n\n");
 }
 
 /*---------------------------------------------------------------------------------------------------------*/
@@ -275,19 +286,20 @@ void SYS_Init(void)
 //    /* Set PD multi-function pins for CANTX0, CANRX0 */
 //    SYS->GPD_MFP &= ~(SYS_GPD_MFP_PD6_Msk | SYS_GPD_MFP_PD7_Msk);
 //    SYS->GPD_MFP = SYS_GPD_MFP_PD6_CAN0_RXD | SYS_GPD_MFP_PD7_CAN0_TXD;
-	
-    /* Disable the GPA0 - GPA3 digital input path to avoid the leakage current. */
-    GPIO_DISABLE_DIGITAL_PATH(PA, 0x1F);
 
     /* Set PA multi-function pins for CANTX1, CANRX1 */
 	SYS->GPA_MFP &= ~(SYS_GPA_MFP_PA10_Msk | SYS_GPA_MFP_PA11_Msk);
 	SYS->GPA_MFP = SYS_GPA_MFP_PA10_CAN1_TXD | SYS_GPA_MFP_PA11_CAN1_RXD;
 	SYS->ALT_MFP &= ~(SYS_ALT_MFP_PA10_Msk | SYS_ALT_MFP_PA11_Msk);
 	SYS->ALT_MFP |= SYS_ALT_MFP_PA10_CAN1_TXD | SYS_ALT_MFP_PA11_CAN1_RXD;
+	
+    /* Disable the GPA0 - GPA3 digital input path to avoid the leakage current. */
+    GPIO_DISABLE_DIGITAL_PATH(PA, 0xF);
 
     /* Configure the GPA0 - GPA3 ADC analog input pins */
     SYS->GPA_MFP &= ~(SYS_GPA_MFP_PA0_Msk | SYS_GPA_MFP_PA1_Msk | SYS_GPA_MFP_PA2_Msk | SYS_GPA_MFP_PA3_Msk | SYS_GPA_MFP_PA4_Msk) ;
     SYS->GPA_MFP |= SYS_GPA_MFP_PA0_ADC0 | SYS_GPA_MFP_PA1_ADC1 | SYS_GPA_MFP_PA2_ADC2 | SYS_GPA_MFP_PA3_ADC3 | SYS_GPA_MFP_PA4_ADC4 ;
+    
     SYS->ALT_MFP1 = 0;
 
 }
@@ -309,31 +321,31 @@ void UART0_Init()
 /*----------------------------------------------------------------------------*/
 void Note_Configure()
 {
-    printf("\n\n");
-    printf("+--------------------------------------------------------------------------+\n");
-    printf("|  About CAN sample code configure                                         |\n");
-    printf("+--------------------------------------------------------------------------+\n");
-    printf("|   The sample code provide a simple sample code for you study CAN         |\n");
-    printf("|   Before execute it, please check description as below                   |\n");
-    printf("|                                                                          |\n");
-    printf("|   1.CAN_TX and CAN_RX should be connected to your CAN transceiver        |\n");
-    printf("|   2.Using two module board and connect to the same CAN BUS               |\n");
-    printf("|   3.Check the terminal resistor of bus is connected                      |\n");
-    printf("|   4.Using UART0 as print message port                                    |\n");
-    printf("|                                                                          |\n");
-    printf("|  |--------|       |-----------|   CANBUS  |-----------|       |--------| |\n");
-    printf("|  |        |------>|           |<--------->|           |<------|        | |\n");
-    printf("|  |        |CAN_TX |    CAN    |   CAN_H   |   CAN     |CAN_TX |        | |\n");
-    printf("|  | NUC2XX |       |Transceiver|           |Transceiver|       | NUC2XX | |\n");
-    printf("|  |        |<------|           |<--------->|           |------>|        | |\n");
-    printf("|  |        |CAN_RX |           |   CAN_L   |           |CAN_RX |        | |\n");
-    printf("|  |--------|       |-----------|           |-----------|       |--------| |\n");
-    printf("|  |                                                            |          |\n");
-    printf("|  |                                                            |          |\n");
-    printf("|  V                                                            V          |\n");
-    printf("| UART0                                                         UART0      |\n");
-    printf("|(print message)                                          (print message)  |\n");
-    printf("+--------------------------------------------------------------------------+\n");
+    app_trace("\n\n");
+    app_trace("+--------------------------------------------------------------------------+\n");
+    app_trace("|  About CAN sample code configure                                         |\n");
+    app_trace("+--------------------------------------------------------------------------+\n");
+    app_trace("|   The sample code provide a simple sample code for you study CAN         |\n");
+    app_trace("|   Before execute it, please check description as below                   |\n");
+    app_trace("|                                                                          |\n");
+    app_trace("|   1.CAN_TX and CAN_RX should be connected to your CAN transceiver        |\n");
+    app_trace("|   2.Using two module board and connect to the same CAN BUS               |\n");
+    app_trace("|   3.Check the terminal resistor of bus is connected                      |\n");
+    app_trace("|   4.Using UART0 as print message port                                    |\n");
+    app_trace("|                                                                          |\n");
+    app_trace("|  |--------|       |-----------|   CANBUS  |-----------|       |--------| |\n");
+    app_trace("|  |        |------>|           |<--------->|           |<------|        | |\n");
+    app_trace("|  |        |CAN_TX |    CAN    |   CAN_H   |   CAN     |CAN_TX |        | |\n");
+    app_trace("|  | NUC2XX |       |Transceiver|           |Transceiver|       | NUC2XX | |\n");
+    app_trace("|  |        |<------|           |<--------->|           |------>|        | |\n");
+    app_trace("|  |        |CAN_RX |           |   CAN_L   |           |CAN_RX |        | |\n");
+    app_trace("|  |--------|       |-----------|           |-----------|       |--------| |\n");
+    app_trace("|  |                                                            |          |\n");
+    app_trace("|  |                                                            |          |\n");
+    app_trace("|  V                                                            V          |\n");
+    app_trace("| UART0                                                         UART0      |\n");
+    app_trace("|(print message)                                          (print message)  |\n");
+    app_trace("+--------------------------------------------------------------------------+\n");
 }
 
 /*----------------------------------------------------------------------------*/
@@ -344,34 +356,33 @@ void SelectCANSpeed(CAN_T  *tCAN)
     uint32_t unItem;
     int32_t i32Err = 0;
 
-    // printf("Please select CAN speed you desired\n");
-    // printf("[0] 1000Kbps\n");
-    // printf("[1]  500Kbps\n");
-    // printf("[2]  250Kbps\n");
-    // printf("[3]  125Kbps\n");
-    // printf("[4]  100Kbps\n");
-    // printf("[5]   50Kbps\n");
+    app_trace("Please select CAN speed you desired\n");
+    app_trace("[0] 1000Kbps\n");
+    app_trace("[1]  500Kbps\n");
+	app_trace("[2]  250Kbps\n");
+	app_trace("[3]  125Kbps\n");
+	app_trace("[4]  100Kbps\n");
+	app_trace("[5]   50Kbps\n");
 
-    // unItem = GetChar();
-    // printf("%c\n", unItem);
-    // if(unItem == '1')
-    //     i32Err = CAN_Open(tCAN,  500000, CAN_BASIC_MODE);//Set target baud-rate and operation mode.
-    // else if(unItem == '2')
-    //     i32Err = CAN_Open(tCAN,  250000, CAN_BASIC_MODE);
-    // else if(unItem == '3')
-    //     i32Err = CAN_Open(tCAN,  125000, CAN_BASIC_MODE);
-    // else if(unItem == '4')
-    //     i32Err = CAN_Open(tCAN,  100000, CAN_BASIC_MODE);
-    // else if(unItem == '5')
-    //     i32Err = CAN_Open(tCAN,   50000, CAN_BASIC_MODE);
-    // else
-        // i32Err = CAN_Open(tCAN, 1000000, CAN_BASIC_MODE);
-    i32Err = CAN_Open(tCAN, 1000000, CAN_BASIC_MODE);
+	unItem = GetChar();
+	app_trace("%c\n", unItem);
+	if(unItem == '1')
+		i32Err = CAN_Open(tCAN,  500000, CAN_BASIC_MODE);//Set target baud-rate and operation mode.
+	else if(unItem == '2')
+		i32Err = CAN_Open(tCAN,  250000, CAN_BASIC_MODE);
+	else if(unItem == '3')
+		i32Err = CAN_Open(tCAN,  125000, CAN_BASIC_MODE);
+	else if(unItem == '4')
+		i32Err = CAN_Open(tCAN,  100000, CAN_BASIC_MODE);
+	else if(unItem == '5')
+		i32Err = CAN_Open(tCAN,   50000, CAN_BASIC_MODE);
+	else
+		i32Err = CAN_Open(tCAN, 1000000, CAN_BASIC_MODE);
 
     if(i32Err < 0)
-        printf("Set CAN bit rate is fail\n");
+        app_trace("Set CAN bit rate is fail\n");
     else
-        printf("Real baud-rate value(bps): %d\n", i32Err);
+        app_trace("Real baud-rate value(bps): %d\n", i32Err);
 
 }
 
@@ -380,16 +391,16 @@ void SelectCANSpeed(CAN_T  *tCAN)
 /*----------------------------------------------------------------------------*/
 void TestItem(void)
 {
-    printf("\n");
-    printf("+------------------------------------------------------------------ +\n");
-    printf("|  Nuvoton CAN BUS DRIVER DEMO                                      |\n");
-    printf("+-------------------------------------------------------------------+\n");
-    printf("|                                                                   |\n");
-    printf("|     Transmit a message by basic mode                              |\n");
-    printf("|     (At first, another module board should be set to              |\n");
-    printf("|     [CAN_BasicMode_Receive] waiting for receiving data)           |\n");
-    printf("|                                                                   |\n");
-    printf("+-------------------------------------------------------------------+\n");
+    app_trace("\n");
+    app_trace("+------------------------------------------------------------------ +\n");
+    app_trace("|  Nuvoton CAN BUS DRIVER DEMO                                      |\n");
+    app_trace("+-------------------------------------------------------------------+\n");
+    app_trace("|                                                                   |\n");
+    app_trace("|     Transmit a message by basic mode                              |\n");
+    app_trace("|     (At first, another module board should be set to              |\n");
+    app_trace("|     [CAN_BasicMode_Receive] waiting for receiving data)           |\n");
+    app_trace("|                                                                   |\n");
+    app_trace("+-------------------------------------------------------------------+\n");
 }
 
 /*----------------------------------------------------------------------------*/
@@ -420,7 +431,7 @@ void Test_BasicMode_Tx(CAN_T  *tCAN)
     msg1.Data[0]  = 0x00;
     msg1.Data[1]  = 0x2;
     CAN_Transmit(tCAN, 0, &msg1);//Send CAN message
-    printf("Send STD_ID:0x1,Data[0,2]\n");
+    app_trace("Send STD_ID:0x1,Data[0,2]\n");
     CLK_SysTickDelay(delaycount);   /* Generate the Delay Time by Systick */
 
     /* Send Message No.2 */
@@ -437,7 +448,7 @@ void Test_BasicMode_Tx(CAN_T  *tCAN)
     msg1.Data[6]  = 0x17;
     msg1.Data[7]  = 0x18;
     CAN_Transmit(tCAN, 0, &msg1);//Send CAN message
-    printf("Send STD_ID:0x1AC,Data[11,12,13,14,15,16,17,18]\n");
+    app_trace("Send STD_ID:0x1AC,Data[11,12,13,14,15,16,17,18]\n");
     CLK_SysTickDelay(delaycount);   /* Generate the Delay Time by Systick */
 
     /* Send Message No.3 */
@@ -454,7 +465,7 @@ void Test_BasicMode_Tx(CAN_T  *tCAN)
     msg1.Data[6]  = 0x27;
     msg1.Data[7]  = 0x28;
     CAN_Transmit(tCAN, 0, &msg1);//Send CAN message
-    printf("Send STD_ID:0x310,Data[21,22,23,24,25,26,27,28]\n");
+    app_trace("Send STD_ID:0x310,Data[21,22,23,24,25,26,27,28]\n");
     CLK_SysTickDelay(delaycount);   /* Generate the Delay Time by Systick */
 
     /* Send Message No.4 */
@@ -471,7 +482,7 @@ void Test_BasicMode_Tx(CAN_T  *tCAN)
     msg1.Data[6]  = 0x37;
     msg1.Data[7]  = 0x38;
     CAN_Transmit(tCAN, 0, &msg1);//Send CAN message
-    printf("Send EXT_ID:0x3377,Data[31,32,33,34,35,36,37,38]\n");
+    app_trace("Send EXT_ID:0x3377,Data[31,32,33,34,35,36,37,38]\n");
     CLK_SysTickDelay(delaycount);   /* Generate the Delay Time by Systick */
 
     /* Send Message No.5 */
@@ -489,9 +500,37 @@ void Test_BasicMode_Tx(CAN_T  *tCAN)
     msg1.Data[7]  = 0x48;
 
     CAN_Transmit(tCAN, 0, &msg1);//Send CAN message
-    printf("Send EXT_ID:0x7755,Data[41,42,43,44,45,46,47,48]\n");
+    app_trace("Send EXT_ID:0x7755,Data[41,42,43,44,45,46,47,48]\n");
     CLK_SysTickDelay(delaycount);   /* Generate the Delay Time by Systick */
 
+}
+
+/*---------------------------------------------------------------------------------------------------------*/
+/* Function: ADC_GetConversionRate                                                                         */
+/*                                                                                                         */
+/* Parameters:                                                                                             */
+/*   None.                                                                                                 */
+/*                                                                                                         */
+/* Returns:                                                                                                */
+/*   Return the A/D conversion rate (sample/second)                                                     */
+/*                                                                                                         */
+/* Description:                                                                                            */
+/*   The conversion rate depends on the clock source of ADC clock.                                         */
+/*   It only needs 21 ADC clocks to complete an A/D conversion.                                            */
+/*---------------------------------------------------------------------------------------------------------*/
+static __INLINE uint32_t ADC_GetConversionRate()
+{
+    uint32_t u32AdcClkSrcSel;
+    uint32_t u32ClkTbl[4] = {__HXT, 0, 0, __HIRC};
+
+    /* Set the PLL clock frequency */
+    u32ClkTbl[1] = PllClock;
+    /* Set the system core clock frequency */
+    u32ClkTbl[2] = SystemCoreClock;
+    /* Get the clock source setting */
+    u32AdcClkSrcSel = ((CLK->CLKSEL1 & CLK_CLKSEL1_ADC_S_Msk) >> CLK_CLKSEL1_ADC_S_Pos);
+    /* Return the ADC conversion rate */
+    return ((u32ClkTbl[u32AdcClkSrcSel]) / (((CLK->CLKDIV & CLK_CLKDIV_ADC_N_Msk) >> CLK_CLKDIV_ADC_N_Pos) + 1) / 21);
 }
 
 /*---------------------------------------------------------------------------------------------------------*/
@@ -506,28 +545,31 @@ void Test_BasicMode_Tx(CAN_T  *tCAN)
 /* Description:                                                                                            */
 /*   ADC single cycle scan mode test.                                                                      */
 /*---------------------------------------------------------------------------------------------------------*/
-void AdcSingleCycleScanModeTest()
+void AdcContScanModeTest()
 {
     uint8_t  u8Option;
     uint32_t u32ChannelCount;
     int32_t  i32ConversionData;
+	float value;
 
-    printf("\n");
-    printf("+----------------------------------------------------------------------+\n");
-    printf("|                 ADC single cycle scan mode sample code               |\n");
-    printf("+----------------------------------------------------------------------+\n");
+    app_trace("\n\nConversion rate: %d samples/second\n", ADC_GetConversionRate());
+    app_trace("\n");
+    app_trace("+----------------------------------------------------------------------+\n");
+    app_trace("|                 ADC continuous scan mode sample code                 |\n");
+    app_trace("+----------------------------------------------------------------------+\n");
+
+    app_trace("\nIn this test, software will get 2 cycles of conversion result from the specified channels.\n");
 
     while(1) {
-        printf("\n\nSelect input mode:\n");
-        printf("  [1] Single end input (channel 0, 1, 2 and 3)\n");
-        printf("  [2] Differential input (input channel pair 0 and 1)\n");
-        printf("  Other keys: exit single cycle scan mode test\n");
+        app_trace("\n\nSelect input mode:\n");
+        app_trace("  [1] Single end input (channel 0, 1, 2 and 3)\n");
+        app_trace("  [2] Differential input (input channel pair 0 and 1)\n");
+        app_trace("  Other keys: exit continuous scan mode test\n");
         u8Option = getchar();
         if(u8Option == '1') {
-
-            /* Set the ADC operation mode as single-cycle, input mode as single-end and
+            /* Set the ADC operation mode as continuous scan, input mode as single-end and
                  enable the analog input channel 0, 1, 2 and 3 */
-            ADC_Open(ADC, ADC_ADCR_DIFFEN_SINGLE_END, ADC_ADCR_ADMD_SINGLE_CYCLE, 0x1F);
+            ADC_Open(ADC, ADC_ADCR_DIFFEN_SINGLE_END, ADC_ADCR_ADMD_CONTINUOUS, 0x1F);
 
             /* Power on ADC module */
             ADC_POWER_ON(ADC);
@@ -540,16 +582,42 @@ void AdcSingleCycleScanModeTest()
 
             /* Wait conversion done */
             while(!ADC_GET_INT_FLAG(ADC, ADC_ADF_INT));
+
+            /* Clear the A/D interrupt flag for safe */
+            ADC_CLR_INT_FLAG(ADC, ADC_ADF_INT);
 
             for(u32ChannelCount = 0; u32ChannelCount < 5; u32ChannelCount++) {
                 i32ConversionData = ADC_GET_CONVERSION_DATA(ADC, u32ChannelCount);
-                printf("Conversion result of channel %d: 0x%X (%d)\n", u32ChannelCount, i32ConversionData, i32ConversionData);
+				switch(u32ChannelCount)
+				{
+					case 0:
+						value = i32ConversionData * 155.0 /4096;
+						break;
+					default:
+						value = i32ConversionData * 347.0 *5 /4096 /47;
+						break;
+				}
+                app_trace("Conversion result of channel %d: 0x%X (%d) v: %f v\n", u32ChannelCount, i32ConversionData, i32ConversionData,value);
             }
-        } else if(u8Option == '2') {
 
-            /* Set the ADC operation mode as single-cycle, input mode as differential and
+            /* Wait conversion done */
+            while(!ADC_GET_INT_FLAG(ADC, ADC_ADF_INT));
+
+            /* Stop A/D conversion */
+            ADC_STOP_CONV(ADC);
+
+            for(u32ChannelCount = 0; u32ChannelCount < 5; u32ChannelCount++) {
+                i32ConversionData = ADC_GET_CONVERSION_DATA(ADC, u32ChannelCount);
+                app_trace("Conversion result of channel %d: 0x%X (%d)\n", u32ChannelCount, i32ConversionData, i32ConversionData);
+            }
+
+            /* Clear the A/D interrupt flag for safe */
+            ADC_CLR_INT_FLAG(ADC, ADC_ADF_INT);
+
+        } else if(u8Option == '2') {
+            /* Set the ADC operation mode as continuous scan, input mode as differential and
                enable analog input channel 0 and 2 */
-            ADC_Open(ADC, ADC_ADCR_DIFFEN_DIFFERENTIAL, ADC_ADCR_ADMD_SINGLE_CYCLE, 0x5);
+            ADC_Open(ADC, ADC_ADCR_DIFFEN_DIFFERENTIAL, ADC_ADCR_ADMD_CONTINUOUS, 0x5);
 
             /* Power on ADC module */
             ADC_POWER_ON(ADC);
@@ -563,10 +631,28 @@ void AdcSingleCycleScanModeTest()
             /* Wait conversion done */
             while(!ADC_GET_INT_FLAG(ADC, ADC_ADF_INT));
 
+            /* Clear the A/D interrupt flag for safe */
+            ADC_CLR_INT_FLAG(ADC, ADC_ADF_INT);
+
             for(u32ChannelCount = 0; u32ChannelCount < 2; u32ChannelCount++) {
                 i32ConversionData = ADC_GET_CONVERSION_DATA(ADC, u32ChannelCount * 2);
-                printf("Conversion result of differential input pair %d: 0x%X (%d)\n", u32ChannelCount, i32ConversionData, i32ConversionData);
+                app_trace("Conversion result of differential input pair %d: 0x%X (%d)\n", u32ChannelCount, i32ConversionData, i32ConversionData);
             }
+
+            /* Wait conversion done */
+            while(!ADC_GET_INT_FLAG(ADC, ADC_ADF_INT));
+
+            /* Stop A/D conversion */
+            ADC_STOP_CONV(ADC);
+
+            for(u32ChannelCount = 0; u32ChannelCount < 2; u32ChannelCount++) {
+                i32ConversionData = ADC_GET_CONVERSION_DATA(ADC, u32ChannelCount * 2);
+                app_trace("Conversion result of differential input pair %d: 0x%X (%d)\n", u32ChannelCount, i32ConversionData, i32ConversionData);
+            }
+
+            /* Clear the A/D interrupt flag for safe */
+            ADC_CLR_INT_FLAG(ADC, ADC_ADF_INT);
+
         } else
             return ;
 
@@ -576,41 +662,73 @@ void AdcSingleCycleScanModeTest()
 void AdcSingleCycleScan(void)
 {
     uint32_t u32ChannelCount;
-    int32_t  i32ConversionData;
+    int32_t i32ConversionData;
+	static int32_t i32MaxConversionData[5],i32MinConversionData[5];
+	int32_t vref;
+	uint8_t i;
 
-    printf("\n");
-    printf("+----------------------------------------------------------------------+\n");
-    printf("|                 ADC single cycle scan mode sample code               |\n");
-    printf("+----------------------------------------------------------------------+\n");
-    /* Set the ADC operation mode as single-cycle, input mode as single-end and
-            enable the analog input channel 0, 1, 2 and 3 */
-    ADC_Open(ADC, ADC_ADCR_DIFFEN_SINGLE_END, ADC_ADCR_ADMD_SINGLE_CYCLE, 0x1F);
+//    app_trace("\n");
+//    app_trace("+----------------------------------------------------------------------+\n");
+//    app_trace("|                 ADC single cycle scan mode sample code               |\n");
+//    app_trace("+----------------------------------------------------------------------+\n");
 
-    /* Power on ADC module */
-    ADC_POWER_ON(ADC);
+	/* Clear the A/D interrupt flag for safe */
+	ADC_CLR_INT_FLAG(ADC, ADC_ADF_INT);
+	
+	for (i = 0; i < 10; i++)
+	{
+		i32BatterySumValue[i] = 0;
+		i32MaxConversionData[i] = 0;
+		i32MinConversionData[i] = 0;
+	}
+	for (i = 0; i < 10; i ++)
+	{
+		/* Start A/D conversion */
+		ADC_START_CONV(ADC);
 
-    /* Clear the A/D interrupt flag for safe */
-    ADC_CLR_INT_FLAG(ADC, ADC_ADF_INT);
+		/* Wait conversion done */
+		while(!ADC_GET_INT_FLAG(ADC, ADC_ADF_INT));
 
-    /* Start A/D conversion */
-    ADC_START_CONV(ADC);
+		/* Clear the A/D interrupt flag for safe */
+		ADC_CLR_INT_FLAG(ADC, ADC_ADF_INT);
+		
+		vref = ADC_GET_CONVERSION_DATA(ADC, 7);
 
-    /* Wait conversion done */
-    while(!ADC_GET_INT_FLAG(ADC, ADC_ADF_INT));
+		for(u32ChannelCount = 0; u32ChannelCount < 4; u32ChannelCount++) {
+			i32ConversionData = ADC_GET_CONVERSION_DATA(ADC, u32ChannelCount);
+			i32BatterySumValue[u32ChannelCount] += i32ConversionData;
+			if (i32MaxConversionData[u32ChannelCount] < i32ConversionData)
+			{
+				i32MaxConversionData[u32ChannelCount] = i32ConversionData;
+			}
+			if (i32MinConversionData[u32ChannelCount] < i32ConversionData)
+			{
+				i32MinConversionData[u32ChannelCount] = i32ConversionData;
+			}
+		}
 
-    for(u32ChannelCount = 0; u32ChannelCount < 5; u32ChannelCount++) {
-        i32ConversionData = ADC_GET_CONVERSION_DATA(ADC, u32ChannelCount);
-        switch(u32ChannelCount)
-        {
-            case 0:
-                i32BatteryValue[u32ChannelCount] = i32ConversionData * 31 * 5000 / 4096;
-            break;
-            default:
-                i32BatteryValue[u32ChannelCount] = i32ConversionData * 347 / 47 * 5000 / 4096;
-            break;
-        }
-        printf("Conversion result of channel %d: 0x%X (%d) volt: %d mV\n", u32ChannelCount, i32ConversionData, i32ConversionData,i32BatteryValue[u32ChannelCount]);
-    }
+		/* Wait conversion done */
+		while(!ADC_GET_INT_FLAG(ADC, ADC_ADF_INT));
+
+		/* Stop A/D conversion */
+		ADC_STOP_CONV(ADC);
+
+//		for(u32ChannelCount = 0; u32ChannelCount < 5; u32ChannelCount++) {
+//			i32ConversionData = ADC_GET_CONVERSION_DATA(ADC, u32ChannelCount);
+//			app_trace("Conversion result of channel %d: 0x%X (%d) volt: %d mV\n", u32ChannelCount, i32ConversionData, i32ConversionData,
+//			i32ConversionData * 1250 / vref);
+//		}
+
+		/* Clear the A/D interrupt flag for safe */
+		ADC_CLR_INT_FLAG(ADC, ADC_ADF_INT);
+	}
+
+	for(u32ChannelCount = 0; u32ChannelCount < 4; u32ChannelCount++) {
+		i32BatteryValue[u32ChannelCount] = (i32BatterySumValue[u32ChannelCount] - i32MaxConversionData[u32ChannelCount] - i32MinConversionData[u32ChannelCount]) * 6250 / vref;
+//		i32BatteryValue[u32ChannelCount] = (i32BatterySumValue[u32ChannelCount]) * 500 / vref;
+//        app_trace("Conversion result of differential input pair %d: 0x%X (%d) volt: %d mV\n", 
+//			u32ChannelCount, i32BatterySumValue[u32ChannelCount]/10, i32BatterySumValue[u32ChannelCount]/10, i32BatteryValue[u32ChannelCount]);
+	}
 }
 /*---------------------------------------------------------------------------------------------------------*/
 /* MAIN function                                                                                           */
@@ -618,6 +736,8 @@ void AdcSingleCycleScan(void)
 int main(void)
 {
     /* Declare a CAN message structure */
+	char i = 0;
+    uint32_t u32ChannelCount;
     STR_CANMSG_T msg;
     CAN_T *tCAN;
     tCAN = (CAN_T *) CAN1;
@@ -631,7 +751,7 @@ int main(void)
     /* Lock protected registers */
     SYS_LockReg();
 
-    /* Init UART0 for printf */
+    /* Init UART0 for app_trace */
     UART0_Init();
 
 	GPIO_SetMode(PA, BIT9, GPIO_PMD_OUTPUT);
@@ -640,11 +760,20 @@ int main(void)
 	GPIO_SetMode(PA, BIT12, GPIO_PMD_OUTPUT);
 	PA12 =1;
 
+	ADC_CONFIG_CH7(ADC,ADC_ADCHER_PRESEL_INT_BANDGAP);
+	
+    /* Set the ADC operation mode as single-cycle, input mode as single-end and
+	enable the analog input channel 0, 1, 2 and 3 */
+	ADC_Open(ADC, ADC_ADCR_DIFFEN_SINGLE_END, ADC_ADCR_ADMD_CONTINUOUS, 0x9F);
+
+	/* Power on ADC module */
+	ADC_POWER_ON(ADC);
+	
     /* To program PWRCON register, it needs to disable register protection first. */
     SYS_UnlockReg();
 
-    /* Open Timer0 frequency to 1 Hz in toggle-output mode */
-    TIMER_Open(TIMER0, TIMER_TOGGLE_MODE, 1);
+    /* Open Timer0 frequency to 10 Hz in toggle-output mode */
+    TIMER_Open(TIMER0, TIMER_TOGGLE_MODE, 10);
 
     /* Enable Timer0 interrupt and wake-up function */
     TIMER_EnableInt(TIMER0);
@@ -664,30 +793,56 @@ int main(void)
     NVIC_EnableIRQ(CAN1_IRQn);
 
     /* configuring the Bit Timing */
-    SelectCANSpeed(tCAN);
+	CAN_Open(tCAN, 1000000, CAN_BASIC_MODE);
 
     while(1)
     {
-        PA12 = ~PA12;
-        AdcSingleCycleScan();
-        msg.FrameType = CAN_DATA_FRAME;
-        msg.IdType   = CAN_STD_ID;
-        msg.Id       = 0x180;
-        msg.DLC      = 8;
-        msg.Data[0]  = (uint8_t)(i32BatteryValue[3] - i32BatteryValue[4]);
-        msg.Data[1]  = (uint8_t)((i32BatteryValue[3] - i32BatteryValue[4]) >> 8);
-        msg.Data[2]  = (uint8_t)(i32BatteryValue[2] - i32BatteryValue[3]);
-        msg.Data[3]  = (uint8_t)((i32BatteryValue[2] - i32BatteryValue[3]) >> 8);
-        msg.Data[4]  = (uint8_t)(i32BatteryValue[1] - i32BatteryValue[2]);
-        msg.Data[5]  = (uint8_t)((i32BatteryValue[1] - i32BatteryValue[2]) >> 8);
-        msg.Data[6]  = (uint8_t)(i32BatteryValue[0] - i32BatteryValue[1]);
-        msg.Data[7]  = (uint8_t)((i32BatteryValue[0] - i32BatteryValue[1]) >> 8);
-        CAN_Transmit(tCAN, 0, &msg);//Send CAN message
-        CLK_SysTickDelay(1000);   /* Generate the Delay Time by Systick */
-
+		AdcSingleCycleScan();
+		i32BatteryAvgValue[0] += i32BatteryValue[3] - i32BatteryValue[4];
+		i32BatteryAvgValue[1] += i32BatteryValue[2] - i32BatteryValue[3];
+		i32BatteryAvgValue[2] += i32BatteryValue[1] - i32BatteryValue[2];
+		i32BatteryAvgValue[3] += i32BatteryValue[0] - i32BatteryValue[1];
+		i++;
+		if (i == 10)
+		{
+			PA12 = ~PA12;
+			i = 0;
+			msg.FrameType = CAN_DATA_FRAME;
+			msg.IdType   = CAN_STD_ID;
+			msg.Id       = 0x180;
+			msg.DLC      = 8;
+			msg.Data[0]  = (uint8_t)(i32BatteryAvgValue[0]/10);
+			msg.Data[1]  = (uint8_t)((i32BatteryAvgValue[0]/10) >> 8);
+			msg.Data[2]  = (uint8_t)(i32BatteryAvgValue[1]/10);
+			msg.Data[3]  = (uint8_t)((i32BatteryAvgValue[1]/10) >> 8);
+			msg.Data[4]  = (uint8_t)(i32BatteryAvgValue[2]/10);
+			msg.Data[5]  = (uint8_t)((i32BatteryAvgValue[2]/10) >> 8);
+			msg.Data[6]  = (uint8_t)(i32BatteryAvgValue[3]/10);
+			msg.Data[7]  = (uint8_t)((i32BatteryAvgValue[3]/10) >> 8);
+			for (u32ChannelCount = 0; u32ChannelCount < 4; u32ChannelCount++)
+			{
+				app_trace("Conversion result of differential input pair %d volt: %d mV\n", 
+				u32ChannelCount, i32BatteryAvgValue[u32ChannelCount]/10);
+				i32BatteryAvgValue[u32ChannelCount] = 0;
+			}
+			CAN_EnableInt(tCAN, CAN_CON_IE_Msk | CAN_CON_SIE_Msk);
+			CLK_SysTickDelay(1000);   /* Generate the Delay Time by Systick */
+			CAN_Transmit(tCAN, 0, &msg);//Send CAN message
+		}	
+//		msg.FrameType = CAN_DATA_FRAME;
+//        msg.IdType   = CAN_STD_ID;
+//        msg.Id       = 0x180;
+//        msg.DLC      = 8;
+//        msg.Data[0]  = (uint8_t)(i32BatteryValue[3] - i32BatteryValue[4]);
+//        msg.Data[1]  = (uint8_t)((i32BatteryValue[3] - i32BatteryValue[4]) >> 8);
+//        msg.Data[2]  = (uint8_t)(i32BatteryValue[2] - i32BatteryValue[3]);
+//        msg.Data[3]  = (uint8_t)((i32BatteryValue[2] - i32BatteryValue[3]) >> 8);
+//        msg.Data[4]  = (uint8_t)(i32BatteryValue[1] - i32BatteryValue[2]);
+//        msg.Data[5]  = (uint8_t)((i32BatteryValue[1] - i32BatteryValue[2]) >> 8);
+//        msg.Data[6]  = (uint8_t)(i32BatteryValue[0] - i32BatteryValue[1]);
+//        msg.Data[7]  = (uint8_t)((i32BatteryValue[0] - i32BatteryValue[1]) >> 8);
         PowerDownFunction();
     }
-
 }
 
 
